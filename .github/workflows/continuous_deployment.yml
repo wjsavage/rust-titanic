@@ -1,64 +1,28 @@
 name: Continuous deployment
-
-on: workflow_dispatch
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
+on:
+  workflow_run:
+    branches: [main]
+    workflows: [Continuous integration]
+    types: [completed]
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Cargo cache
-        uses: actions/cache@v3
+      - uses: actions-rs/toolchain@v1
         with:
-          path: |
-            ~/.cargo/bin
-            ~/.cargo/git
-            ~/.cargo/registry
-            target
-            wasm-runner/dist
-          key: ${{ runner.os }}-cargo
+          toolchain: stable
+          target: wasm32-unknown-unknown
 
-      - name: Install dependencies
-        run: |
-          cargo install --locked trunk || true \
-          && rustup target add wasm32-unknown-unknown
+      - uses: jetli/trunk-action@v0.1.0
+      - uses: jetli/wasm-bindgen-action@v0.1.0
 
-      - name: Build the Rust WASM app and all of its assets
-        run: |
-          trunk build \
-            --release \
-            --public-url ${{ github.event.repository.name }} \
-            -- \
-            ./wasm-runner/index.html
+      - uses: actions/checkout@v2
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v2
+      - run: trunk build --release
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+      - uses: peaceiris/actions-gh-pages@v3
+        if: github.ref == 'refs/heads/main'
         with:
-          path: './wasm-runner/dist'
-
-  deploy:
-    needs: build
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v1
+          github_token: $
+          publish_dir: ./dist
